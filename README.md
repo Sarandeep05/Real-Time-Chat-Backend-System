@@ -1,4 +1,4 @@
-# 💬 Real-Time Chat Backend
+# 💬 Real-Time Chat Backend System
 
 A production-ready, real-time chat backend built with **Spring Boot 3**, **MongoDB**, and **WebSockets (STOMP)**. Supports one-to-one and group messaging, JWT authentication, read receipts, and online presence tracking.
 
@@ -12,6 +12,17 @@ A production-ready, real-time chat backend built with **Spring Boot 3**, **Mongo
 | Real-time | WebSocket + STOMP |
 | Auth | JWT (jjwt 0.12.5) |
 | Build Tool | Gradle |
+| API Docs | SpringDoc OpenAPI (Swagger UI) |
+
+---
+
+## 🌐 Live Deployment
+
+| Resource | URL |
+|---|---|
+| **API Base URL** | `https://<your-app-name>.onrender.com` |
+| **Swagger API Docs** | `https://<your-app-name>.onrender.com/swagger-ui/index.html` |
+| **GitHub Repository** | `https://github.com/Sarandeep05/Real-Time-Chat-Backend-System` |
 
 ---
 
@@ -24,8 +35,8 @@ A production-ready, real-time chat backend built with **Spring Boot 3**, **Mongo
 ### Clone & Run
 
 ```bash
-git clone <your-repo-url>
-cd chat-backend
+git clone https://github.com/Sarandeep05/Real-Time-Chat-Backend-System.git
+cd Real-Time-Chat-Backend-System
 
 # Set environment variables (or edit application.properties)
 export MONGO_URI="mongodb://localhost:27017/chatdb"
@@ -50,6 +61,16 @@ The API will be available at `http://localhost:8080`.
 | `PORT` | `8080` | Server port |
 
 > **⚠️ Security:** Always override `JWT_SECRET` in production. Never commit secrets to source control.
+
+---
+
+## 📖 API Documentation
+
+Interactive API documentation is available via **Swagger UI**:
+- **Local:** `http://localhost:8080/swagger-ui/index.html`
+- **Production:** `https://<your-app-name>.onrender.com/swagger-ui/index.html`
+
+Swagger UI includes a built-in **Authorize** button to test secured endpoints with JWT tokens.
 
 ---
 
@@ -154,11 +175,11 @@ stompClient.connect(headers, onConnected);
 | Server → Client | `/user/queue/messages` | Receive direct messages |
 | Server → Client | `/topic/group/{groupId}` | Receive group messages |
 | Server → Client | `/user/queue/receipts` | Receive read receipt confirmations |
+| Server → Client | `/user/queue/errors` | Receive error notifications |
 | Server → Client | `/topic/presence` | User online/offline events |
 
 ### Send Direct Message
 ```json
-// Subscribe to: /user/queue/messages  (before connecting)
 // Send to: /app/chat.send
 {
   "senderId": "alice-id",
@@ -170,7 +191,6 @@ stompClient.connect(headers, onConnected);
 
 ### Send Group Message
 ```json
-// Subscribe to: /topic/group/{groupId}  (before connecting)
 // Send to: /app/chat.group.send
 {
   "senderId": "alice-id",
@@ -212,12 +232,14 @@ stompClient.connect(headers, onConnected);
 ├── security/
 │   ├── JwtTokenProvider.java        # JWT generation & validation
 │   ├── JwtAuthFilter.java           # HTTP request JWT filter
-│   ├── SecurityConfig.java          # Spring Security configuration
+│   ├── WebSecurityConfig.java       # Spring Security configuration
 │   └── CustomUserDetails(Service).java
 ├── config/
 │   ├── WebSocketConfig.java         # STOMP broker & endpoint config
 │   ├── WebSocketAuthInterceptor.java # JWT validation on CONNECT frame
-│   └── WebSocketEventListener.java  # Online/offline presence tracking
+│   ├── WebSocketEventListener.java  # Online/offline presence + delivery
+│   ├── CorsConfig.java             # CORS configuration for deployment
+│   └── OpenApiConfig.java          # Swagger/OpenAPI metadata
 └── exception/
     └── GlobalExceptionHandler.java  # Structured JSON error responses
 ```
@@ -240,11 +262,11 @@ stompClient.connect(headers, onConnected);
 | Field | Type | Description |
 |---|---|---|
 | id | String | MongoDB ObjectId |
-| senderId | String | Sender user ID |
-| receiverId | String | Target user ID (DIRECT) or group ID (GROUP) |
+| senderId | String | Sender user ID (indexed) |
+| receiverId | String | Target user/group ID (indexed) |
 | type | Enum | DIRECT / GROUP |
 | content | String | Message text |
-| timestamp | Instant | Send time |
+| timestamp | Instant | Send time (indexed) |
 | status | Enum | SENT / DELIVERED / READ |
 
 ### Group
@@ -258,12 +280,26 @@ stompClient.connect(headers, onConnected);
 
 ---
 
+## 🛡️ Edge Cases Handled
+
+| Edge Case | How It's Handled |
+|---|---|
+| User offline | Message persisted with status `SENT` |
+| User reconnect | `markMessagesDelivered()` called on WebSocket connect |
+| Message to non-existent user | Validated; error sent to sender via `/user/queue/errors` |
+| Removed group member sending messages | Membership validated before broadcasting |
+| Duplicate message delivery | Messages saved with unique MongoDB `_id` before broadcasting |
+| Invalid JWT on WebSocket | `WebSocketAuthInterceptor` rejects CONNECT frame |
+
+---
+
 ## 📬 Offline Message Delivery
 
 Messages are **persisted to MongoDB before broadcasting**. If the recipient is offline:
 1. The message is saved with status `SENT`
-2. On reconnect, the client fetches missed messages via `GET /chats/direct`
-3. Delivery status is upgraded to `DELIVERED` automatically on reconnect via the WebSocket event listener
+2. On reconnect, `WebSocketEventListener` calls `markMessagesDelivered(userId)`
+3. Status upgraded to `DELIVERED` automatically
+4. Client fetches missed messages via `GET /chats/direct`
 
 ---
 
@@ -284,41 +320,36 @@ To scale horizontally across multiple instances:
 
 ---
 
-## 🚢 Deployment (Render / Railway)
+## 🚢 Deployment (Render)
 
-### Render
 1. Push code to GitHub
-2. Create a new **Web Service** → connect repo
-3. Build command: `./gradlew build`
-4. Start command: `java -jar build/libs/chat-backend-0.0.1-SNAPSHOT.jar`
+2. Create a new **Web Service** on [Render](https://render.com) → connect repo
+3. **Build command:** `./gradlew build -x test`
+4. **Start command:** `java -jar build/libs/chat-backend-0.0.1-SNAPSHOT.jar`
 5. Add environment variables: `MONGO_URI`, `JWT_SECRET`
-
-### Railway
-1. Connect GitHub repository
-2. Add variables in the Railway dashboard
-3. Railway auto-detects Gradle and deploys automatically
+6. Deploy and copy the live URL
 
 ---
 
-## 🧪 Testing with Postman / curl
+## 🧪 Testing with curl
 
 ### Register
 ```bash
-curl -X POST http://localhost:8080/auth/register \
+curl -X POST https://<your-app>/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Alice","email":"alice@test.com","password":"pass123"}'
 ```
 
 ### Login
 ```bash
-curl -X POST http://localhost:8080/auth/login \
+curl -X POST https://<your-app>/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"alice@test.com","password":"pass123"}'
 ```
 
 ### List Users (with token)
 ```bash
-curl http://localhost:8080/users \
+curl https://<your-app>/users \
   -H "Authorization: Bearer <token>"
 ```
 
