@@ -43,7 +43,7 @@ public class WebSecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(Customizer.withDefaults())
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/health", "/auth/**", "/ws/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/", "/index.html", "/health", "/auth/**", "/ws/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/*.js", "/*.css", "/*.ico").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session
