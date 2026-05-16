@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Chat Test Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f4f4f9;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #messages {
+            height: 300px;
+            border: 1px solid #ddd;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        input,
+        button {
+            padding: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 5px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .status {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>💬 Chat Test Client</h2>
+        <div id="status" class="status">Status: Disconnected</div>
+
+        <div class="input-group">
+            <label>1. Paste JWT Token (from login response):</label>
+            <input type="text" id="token" placeholder="Bearer eyJhbGciOiJIUzUxMiJ9...">
+        </div>
+
+        <div class="input-group">
+            <label>2. Your User ID:</label>
+            <input type="text" id="myId" placeholder="Alice's ID">
+        </div>
+
+        <button onclick="connect()">Connect to WebSocket</button>
+
+        <hr>
+
+        <div id="messages"></div>
+
+        <div class="input-group">
+            <input type="text" id="targetId" placeholder="Recipient User ID (e.g., Bob's ID)">
+            <input type="text" id="messageContent" placeholder="Type a message...">
+            <button onclick="sendMessage()">Send Message</button>
+        </div>
+    </div>
+
+    <script>
+        var stompClient = null;
+
+        function connect() {
+            var token = document.getElementById('token').value;
+            if (!token.startsWith('Bearer ')) token = 'Bearer ' + token;
+
+            var socket = new SockJS('http://localhost:8080/ws');
+            stompClient = Stomp.over(socket);
+
+            stompClient.connect({ Authorization: token }, function (frame) {
+                document.getElementById('status').innerText = 'Status: Connected as ' + frame.headers['user-name'];
+                document.getElementById('status').style.color = 'green';
+
+                // Subscribe to private messages
+                var myId = document.getElementById('myId').value;
+                stompClient.subscribe('/user/' + myId + '/queue/messages', function (msg) {
+                    showMessage(JSON.parse(msg.body));
+                });
+            }, function (error) {
+                alert('Connection Error: ' + error);
+            });
+        }
+
+        function sendMessage() {
+            var myId = document.getElementById('myId').value;
+            var targetId = document.getElementById('targetId').value;
+            var content = document.getElementById('messageContent').value;
+
+            var chatMessage = {
+                senderId: myId,
+                receiverId: targetId,
+                content: content,
+                type: 'DIRECT'
+            };
+
+            stompClient.send("/app/chat.send", {}, JSON.stringify(chatMessage));
+            document.getElementById('messageContent').value = '';
+        }
+
+        function showMessage(msg) {
+            var messages = document.getElementById('messages');
+            var div = document.createElement('div');
+            div.innerHTML = '<b>' + msg.senderName + ':</b> ' + msg.content;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>
